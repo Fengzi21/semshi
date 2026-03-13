@@ -51,12 +51,17 @@ class Node:
         if hl_group == ATTRIBUTE:
             self.symbol = None
         else:
+            table = self.env[-1]
             try:
-                self.symbol = self.env[-1].lookup(self.symname)
+                # Python ≤3.10 behavior
+                self.symbol = table.lookup(self.symname)
             except KeyError:
-                # Set dummy hl group, so all fields in __repr__ are defined.
-                self.hl_group = '?'
-                raise Exception('%s can\'t lookup "%s"' % (self, self.symname))
+                # Python ≥3.11: builtin / typing symbols may be absent
+                symbols = getattr(table._table, "symbols", {})
+                if self.symname in symbols:
+                    self.symbol = table.lookup(self.symname)
+                else:
+                    self.symbol = None
         if hl_group is not None:
             self.hl_group = hl_group
         else:
@@ -90,6 +95,8 @@ class Node:
     def _make_hl_group(self):
         """Return highlight group the node belongs to."""
         sym = self.symbol
+        if sym is None:
+            return 'semshiBuiltin'
         name = self.name
         if sym.is_parameter():
             table = self.env[-1]
@@ -164,7 +171,7 @@ class Node:
         """
         if self.hl_group == ATTRIBUTE:
             return self.env[-1]
-        if self.symbol.is_global():
+        if self.symbol and self.symbol.is_global():
             return self.env[0]
         if self.symbol.is_local() and not self.symbol.is_free():
             return self.env[-1]
